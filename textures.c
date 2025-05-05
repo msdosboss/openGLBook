@@ -13,9 +13,21 @@ void framebufferSizeCallback(GLFWwindow *window, int width, int height){
 }
 
 
-void processInput(GLFWwindow *window){
+void processInput(GLFWwindow *window, float *mixValue){
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
         glfwSetWindowShouldClose(window, true);
+    }
+    if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS){
+        *mixValue += .01f;
+        if(*mixValue >= 1.0f){
+            *mixValue = 1.0f;
+        }
+    }
+    if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS){
+        *mixValue -= .01;
+        if(*mixValue <= 0){
+            *mixValue = 0;
+        }
     }
 }
 
@@ -88,27 +100,50 @@ unsigned int linkShaders(const char *vertexFileName, const char *fragmentFileNam
 }
 
 
-unsigned int genTexture(const char *fileName){
+unsigned int *genTextures(const char *firstFileName, const char *secondFileName){
+
+    stbi_set_flip_vertically_on_load(true);
+
+    unsigned int *textures = malloc(sizeof(unsigned int) * 2);
 
     int width, height, nChannels;
-    unsigned char *data = stbi_load("container.jpg", &width, &height, &nChannels, 0);
+    unsigned char *data = stbi_load(firstFileName, &width, &height, &nChannels, 0);
 
-    unsigned int texture;
-    glGenTextures(1, &texture);
+    glGenTextures(1, &textures[0]);
 
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-    glBindTexture(GL_TEXTURE, texture);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textures[0]);
 
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
     glGenerateMipmap(GL_TEXTURE_2D);
 
     stbi_image_free(data);
 
-    return texture;
+    data = stbi_load(secondFileName, &width, &height, &nChannels, 0);
+
+    glGenTextures(1, &textures[1]);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, textures[1]);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    stbi_image_free(data);
+
+    return textures;
 }
 
 
@@ -135,43 +170,18 @@ int main(){
     glViewport(0, 0, 800, 600);
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
 
-    /*float triangleVertices[] = {
-        -0.5f, -0.5f, -0.5f,
-        0.5f, -0.5f, 0.5f,
-        -0.0f, 0.5f, 0.0f,
-    };*/
-
     //creates rect
-    /*float vertices[] = {
-        0.5f, 0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f,
-        -0.5f, -0.5f, 0.0f,
-        -0.5f, 0.5f, 0.0f
+    float vertices[] = {
+        //POS                        //colors           //texture coords
+        0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+        0.5f, -0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+        -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+        -0.5f, 0.5f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f
     };
 
     unsigned int indices[] = {
         0, 1, 3,
         1, 2, 3
-    };*/
-
-    //creates 2 triangles next to each other
-    /*float vertices[] = {
-        0.0f, 0.0f, 0.0f,
-        -0.5f, 0.0f, 0.0f,
-        0.5f, 0.0f, 0.0f,
-        -0.25f, 0.5f, 0.0f,
-        0.25f, 0.5f, 0.0f
-    };
-
-    unsigned int indices[] = {
-        0, 1, 3,
-        0, 2, 4
-    };*/
-
-    float texCoords[] = {
-        0.0f, 0.0f,
-        1.0f, 0.0f,
-        0.5f, 1.0f
     };
 
     //setting texture wrapping mode. Has to be done for both axises.
@@ -190,60 +200,51 @@ int main(){
     glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, borderColor)
 
     */
-    float vertices[] = {
-        0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
-        -0.5f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
-        -0.25f, 0.5f, 0.0f, 0.0f, 0.0f, 1.0f
-    };
-
-    float vertices2[] = {
-        0.0f, 0.0f, 0.0f,
-        0.5f, 0.0f, 0.0f,
-        0.25f, 0.5f, 0.0f
-    };
 
     unsigned int VAO;
     glGenVertexArrays(1, &VAO);
-    //unsigned int EBO;
-    //glGenBuffers(1, &EBO);
+    unsigned int EBO;
+    glGenBuffers(1, &EBO);
     unsigned int VBO;
     glGenBuffers(1, &VBO);  //Creates buffer for array data
     glBindVertexArray(VAO);
     glBindBuffer(GL_ARRAY_BUFFER, VBO);  //binds buffer to the GL_ARRAY_BUFFER
     glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);  //telling the openGL state box how to read the inputVector
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);  //telling the openGL state box how to read the inputVector
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
     glEnableVertexAttribArray(1);
-    //glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-    //glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
-    /*unsigned int VAO2, VBO2;
-    glGenVertexArrays(2, &VAO2);
-    glGenBuffers(2, &VBO2);
-    glBindVertexArray(VAO2);
-    glBindBuffer(GL_ARRAY_BUFFER, VBO2);  //binds buffer to the GL_ARRAY_BUFFER
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices2), vertices2, GL_STATIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);  //telling the openGL state box how to read the inputVector
-    glEnableVertexAttribArray(0);*/
-
-    unsigned int shaderProgram = linkShaders("upsideDownVertex.glsl", "fragment.glsl");
-    //unsigned int yellowShaderProgram = linkShaders("vertex.glsl", "yellowfrag.glsl");
+    unsigned int shaderProgram = linkShaders("shaders/textureVertex.glsl", "shaders/textureFragments.glsl");
     glUseProgram(shaderProgram);
 
 
     //glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);  // Enables wireFrame mode
     //glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);  // reverts to fill mode (default)
 
+
     float xOffset = 0;
     float yOffset = 0;
     float colorOffset = 0;
+    float mixValue = 0.2;
+
+    unsigned int *textures = genTextures("textures/wall.jpg", "textures/awesomeface.png");
+    glBindVertexArray(VAO);
+
+    int textureUniformLocation = glGetUniformLocation(shaderProgram, "ourTexture");
+    glUniform1i(textureUniformLocation, 0);
+
+    glUniform1i(glGetUniformLocation(shaderProgram, "texture2"), 1);
 
     while(!glfwWindowShouldClose(window)){
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT);
 
-        processInput(window);
+        processInput(window, &mixValue);
 
         glUseProgram(shaderProgram);
         float timeValue = glfwGetTime();
@@ -253,8 +254,6 @@ int main(){
         yOffset = sin(timeValue);
         colorOffset = sin(timeValue);
 
-        int vertexColorLocation = glGetUniformLocation(shaderProgram, "ourColor");
-        glUniform4f(vertexColorLocation, redValue, greenValue, 0.0f, 1.0f);
         int vertexXOffsetLocation = glGetUniformLocation(shaderProgram, "xOffset");
         glUniform1f(vertexXOffsetLocation, xOffset);
         int vertexYOffsetLocation = glGetUniformLocation(shaderProgram, "yOffset");
@@ -262,12 +261,10 @@ int main(){
         int vertexColorOffsetLocation = glGetUniformLocation(shaderProgram, "colorOffset");
         glUniform1f(vertexColorOffsetLocation, colorOffset);
 
+        glUniform1f(glGetUniformLocation(shaderProgram, "mixValue"), mixValue);
+
         glBindVertexArray(VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);  // This is when you are not using the EBO
-        //glUseProgram(yellowShaderProgram);
-        //glBindVertexArray(VAO2);
-        //glDrawArrays(GL_TRIANGLES, 0, 3);  // This is when you are not using the EBO
-        //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
+        glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
         glfwSwapBuffers(window);
         glfwPollEvents();
         if(xOffset >= 1.5f){
