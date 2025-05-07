@@ -1,2 +1,2 @@
 all: helloworld.c glad.c
-	gcc -o main textures.c glad.c -lglfw -lm
+	gcc -o main camera.c glad.c -lglfw -lm
