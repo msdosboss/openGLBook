@@ -11,7 +11,7 @@
 
 
 struct Camera{
-    vec3 postition;
+    vec3 position;
     vec3 front;
     vec3 up;
     float yaw;
@@ -23,12 +23,26 @@ struct Camera{
 };
 
 
+struct CubePositions{
+    vec3 *cubePositions;
+    int positionIndex;
+};
+
+
+struct CamAndPos{
+    struct Camera *cam;
+    struct CubePositions *cubePosition;
+};
+
+
 void framebufferSizeCallback(GLFWwindow *window, int width, int height){
     glViewport(0, 0, width, height);
 }
 
 
-void processInput(GLFWwindow *window, float deltaTime, vec3 *cameraPos, vec3 *cameraFront, vec3 *cameraUp){
+void processInput(GLFWwindow *window, float deltaTime){
+    struct CamAndPos *camAndPos = glfwGetWindowUserPointer(window);
+    struct Camera *cam = camAndPos->cam;
     if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS){
         glfwSetWindowShouldClose(window, true);
     }
@@ -37,27 +51,31 @@ void processInput(GLFWwindow *window, float deltaTime, vec3 *cameraPos, vec3 *ca
 
     if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
         vec3 cameraPosOffset;
-        glm_vec3_mul(cameraSpeed, *cameraFront, cameraPosOffset);
-        glm_vec3_add(*cameraPos, cameraPosOffset, *cameraPos);
+        glm_vec3_mul(cameraSpeed, cam->front, cameraPosOffset);
+        float oldCamYposition = cam->position[1];
+        glm_vec3_add(cam->position, cameraPosOffset, cam->position);
+        //cam->position[1] = oldCamYposition;
     }
     if(glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS){
         vec3 cameraPosOffset;
-        glm_vec3_mul(cameraSpeed, *cameraFront, cameraPosOffset);
-        glm_vec3_sub(*cameraPos, cameraPosOffset, *cameraPos);
+        glm_vec3_mul(cameraSpeed, cam->front, cameraPosOffset);
+        float oldCamYposition = cam->position[1];
+        glm_vec3_sub(cam->position, cameraPosOffset, cam->position);
+        //cam->position[1] = oldCamYposition;
     }
     if(glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS){
         vec3 cameraPosOffset;
-        glm_cross(*cameraFront, *cameraUp, cameraPosOffset);
+        glm_cross(cam->front, cam->up, cameraPosOffset);
         glm_normalize(cameraPosOffset);
         glm_vec3_mul(cameraPosOffset, cameraSpeed, cameraPosOffset);
-        glm_vec3_sub(*cameraPos, cameraPosOffset, *cameraPos);
+        glm_vec3_sub(cam->position, cameraPosOffset, cam->position);
     }
     if(glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS){
         vec3 cameraPosOffset;
-        glm_cross(*cameraFront, *cameraUp, cameraPosOffset);
+        glm_cross(cam->front, cam->up, cameraPosOffset);
         glm_normalize(cameraPosOffset);
         glm_vec3_mul(cameraPosOffset, cameraSpeed, cameraPosOffset);
-        glm_vec3_add(*cameraPos, cameraPosOffset, *cameraPos);
+        glm_vec3_add(cam->position, cameraPosOffset, cam->position);
     }
 }
 
@@ -178,7 +196,8 @@ unsigned int *genTextures(const char *firstFileName, const char *secondFileName)
 
 
 void mouseCallback(GLFWwindow *window, double xpos, double ypos){
-    struct Camera *cam = glfwGetWindowUserPointer(window);
+    struct CamAndPos *camAndPos = glfwGetWindowUserPointer(window);
+    struct Camera *cam = camAndPos->cam;
 
     if(cam->firstMouse){
         cam->lastX = xpos;
@@ -214,7 +233,8 @@ void mouseCallback(GLFWwindow *window, double xpos, double ypos){
 
 
 void scrollCallback(GLFWwindow *window, double xoffset, double yoffset){
-    struct Camera *cam = glfwGetWindowUserPointer(window);
+    struct CamAndPos *camAndPos = glfwGetWindowUserPointer(window);
+    struct Camera *cam = camAndPos->cam;
 
     cam->fov -= (float)yoffset;
     if(cam->fov < 1.0f){
@@ -222,6 +242,30 @@ void scrollCallback(GLFWwindow *window, double xoffset, double yoffset){
     }
     if(cam->fov > 89.0f){
         cam->fov = 89.0f;
+    }
+}
+
+
+void addCube(GLFWwindow *window, vec3 newCubePosition){
+    struct CamAndPos *camAndPos = glfwGetWindowUserPointer(window);
+    struct CubePositions *cubePosition = camAndPos->cubePosition;
+    cubePosition->cubePositions = (vec3*)realloc(cubePosition->cubePositions, sizeof(vec3) * (cubePosition->positionIndex + 1));
+    cubePosition->cubePositions[cubePosition->positionIndex][0] = newCubePosition[0];
+    cubePosition->cubePositions[cubePosition->positionIndex][1] = newCubePosition[1];
+    cubePosition->cubePositions[cubePosition->positionIndex++][2] = newCubePosition[2];
+}
+
+
+void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods){
+    struct CamAndPos *camAndPos = glfwGetWindowUserPointer(window);
+    struct Camera *cam = camAndPos->cam;
+    if(button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS){
+        vec3 cameraCenter;
+        glm_vec3_add(cam->position, cam->front, cameraCenter);
+        cameraCenter[0] = (int)cameraCenter[0];
+        cameraCenter[1] = (int)cameraCenter[1];
+        cameraCenter[2] = (int)cameraCenter[2];
+        addCube(window, cameraCenter);
     }
 }
 
@@ -250,20 +294,24 @@ int main(){
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+    vec3 intialCubePositions[16];
 
-    vec3 cubePositions[] = {
-        {0.0f, 0.0f, 0.0f},
-        {2.0f, 5.0f, -15.0f},
-        {-1.5f, -2.2f, -2.5f},
-        {-3.8f, -2.0f, -12.3f},
-        {2.4f, -0.4f, -3.5f},
-        {-1.7f, 3.0f, -7.5f},
-        {1.3f, -2.0f, -2.5f},
-        {1.5f, 2.0f, -2.5f},
-        {1.5f, 0.2f, -1.5f},
-        {-1.3f, 1.0f, -1.5f}
+    for(int i = 0; i < 16; i++){
+        intialCubePositions[i][0] = i / 4;
+        intialCubePositions[i][1] = 0;
+        intialCubePositions[i][2] = i % 4;
+    }
+
+    struct CubePositions cubePosition = {
+        .cubePositions = malloc(sizeof(vec3) * 16),
+        .positionIndex = 0
     };
 
+    for(; cubePosition.positionIndex < 16; cubePosition.positionIndex++){
+        cubePosition.cubePositions[cubePosition.positionIndex][0] = intialCubePositions[cubePosition.positionIndex][0];
+        cubePosition.cubePositions[cubePosition.positionIndex][1] = intialCubePositions[cubePosition.positionIndex][1];
+        cubePosition.cubePositions[cubePosition.positionIndex][2] = intialCubePositions[cubePosition.positionIndex][2];
+    }
 
     vec3 rotations[] = {
         {1.0f, 0.0f, 0.0f},
@@ -278,8 +326,7 @@ int main(){
         {1.0f, 1.0f, 1.0f},
     };
 
-
-    //creates rect
+    //creates cube
     float vertices[] = {
         -0.5f, -0.5f, -0.5f, 0.0f, 0.0f,
         0.5f, -0.5f, -0.5f, 1.0f, 0.0f,
@@ -349,7 +396,7 @@ int main(){
     glEnable(GL_DEPTH_TEST);
 
     struct Camera camera ={
-        .postition = {0.0f, 0.0f, 3.0f},
+        .position = {0.0f, 0.0f, 3.0f},
         .front = {0.0f, 0.0f, -1.0f},
         .up = {0.0f, 1.0f, 0.0f},
         .yaw = -90.0f,
@@ -363,9 +410,15 @@ int main(){
     float deltaTime = 0.0f;
     float lastFrame = 0.0f;
 
-    glfwSetWindowUserPointer(window, &camera);
+    struct CamAndPos camAndPos = {
+        .cam = &camera,
+        .cubePosition = &cubePosition
+    };
+
+    glfwSetWindowUserPointer(window, &camAndPos);
     glfwSetCursorPosCallback(window, mouseCallback);
     glfwSetScrollCallback(window, scrollCallback);
+    glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
     while(!glfwWindowShouldClose(window)){
         float currentFrame = glfwGetTime();
@@ -375,15 +428,15 @@ int main(){
         glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        processInput(window, deltaTime, &(camera.postition), &(camera.front), &(camera.up));
+        processInput(window, deltaTime);
 
         glUseProgram(shaderProgram);
 
         mat4 view;
 
         vec3 cameraCenter;
-        glm_vec3_add(camera.postition, camera.front, cameraCenter);
-        glm_lookat(camera.postition, cameraCenter, camera.up, view);
+        glm_vec3_add(camera.position, camera.front, cameraCenter);
+        glm_lookat(camera.position, cameraCenter, camera.up, view);
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, (const float *)view);
 
@@ -392,12 +445,12 @@ int main(){
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, (const float *)projection);
 
-        for(int i = 0; i < 10; i++){
+        for(int i = 0; i < cubePosition.positionIndex; i++){
             mat4 model;
             glm_mat4_identity(model);
-            glm_translate(model, cubePositions[i]);
+            glm_translate(model, cubePosition.cubePositions[i]);
             //vec3 rotationAxises = {1.0f, -1.0f, 1.0f};
-            glm_rotate(model, (float)glfwGetTime() * glm_rad(50.0f), rotations[i]);
+            //glm_rotate(model, (float)glfwGetTime() * glm_rad(50.0f), rotations[i % 10]);
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, (const float *)model);
 
         //glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
@@ -408,7 +461,7 @@ int main(){
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
-    //free(fileText);
+    free(cubePosition.cubePositions);
     glfwTerminate();
     return 0;
 }
