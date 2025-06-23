@@ -23,7 +23,7 @@ struct Camera{
 };
 
 
-struct CubePositions{
+struct World{
     vec3 *cubePositions;
     int positionIndex;
 };
@@ -31,7 +31,7 @@ struct CubePositions{
 
 struct CamAndPos{
     struct Camera *cam;
-    struct CubePositions *cubePosition;
+    struct World *world;
 };
 
 
@@ -244,11 +244,11 @@ void scrollCallback(GLFWwindow *window, double xoffset, double yoffset){
 
 void addCube(GLFWwindow *window, vec3 newCubePosition){
     struct CamAndPos *camAndPos = glfwGetWindowUserPointer(window);
-    struct CubePositions *cubePosition = camAndPos->cubePosition;
-    cubePosition->cubePositions = (vec3*)realloc(cubePosition->cubePositions, sizeof(vec3) * (cubePosition->positionIndex + 1));
-    cubePosition->cubePositions[cubePosition->positionIndex][0] = newCubePosition[0];
-    cubePosition->cubePositions[cubePosition->positionIndex][1] = newCubePosition[1];
-    cubePosition->cubePositions[cubePosition->positionIndex++][2] = newCubePosition[2];
+    struct World *world = camAndPos->world;
+    world->cubePositions = (vec3*)realloc(world->cubePositions, sizeof(vec3) * (world->positionIndex + 1));
+    world->cubePositions[world->positionIndex][0] = newCubePosition[0];
+    world->cubePositions[world->positionIndex][1] = newCubePosition[1];
+    world->cubePositions[world->positionIndex++][2] = newCubePosition[2];
 }
 
 
@@ -263,6 +263,54 @@ void mouseButtonCallback(GLFWwindow *window, int button, int action, int mods){
         cameraCenter[2] = (int)cameraCenter[2];
         addCube(window, cameraCenter);
     }
+}
+
+
+void dirlightAssignUni(unsigned int shaderProgram, vec3 direction, vec3 ambient, vec3 diffuse, vec3 specular){
+
+    glUseProgram(shaderProgram);
+
+    glUniform3fv(glGetUniformLocation(shaderProgram, "dirLight.direction"), 1, (const float *)direction);
+
+    glUniform3fv(glGetUniformLocation(shaderProgram, "dirLight.ambient"), 1, (const float *)ambient);
+    glUniform3fv(glGetUniformLocation(shaderProgram, "dirLight.diffuse"), 1, (const float *)diffuse);
+    glUniform3fv(glGetUniformLocation(shaderProgram, "dirLight.specular"), 1, (const float *)specular);
+
+}
+
+
+void pointlightAssignUni(unsigned int shaderProgram, int index, vec3 position, vec3 ambient, vec3 diffuse, vec3 specular, float constant, float linear, float quadratic){
+
+    char name[128];
+
+    snprintf(name, sizeof(name), "pointLights[%d].position", index);
+    glUniform3fv(glGetUniformLocation(shaderProgram, name), 1, (const float *)position);
+
+    snprintf(name, sizeof(name), "pointLights[%d].constant", index);
+    glUniform1f(glGetUniformLocation(shaderProgram, name), constant);
+
+    snprintf(name, sizeof(name), "pointLights[%d].linear", index);
+    glUniform1f(glGetUniformLocation(shaderProgram, name), linear);
+
+    snprintf(name, sizeof(name), "pointLights[%d].quadratic", index);
+    glUniform1f(glGetUniformLocation(shaderProgram, name), quadratic);
+
+    snprintf(name, sizeof(name), "pointLights[%d].ambient", index);
+    glUniform3fv(glGetUniformLocation(shaderProgram, name), 1, (const float *)ambient);
+
+    snprintf(name, sizeof(name), "pointLights[%d].diffuse", index);
+    glUniform3fv(glGetUniformLocation(shaderProgram, name), 1, (const float *)diffuse);
+
+    snprintf(name, sizeof(name), "pointLights[%d].specular", index);
+    glUniform3fv(glGetUniformLocation(shaderProgram, name), 1, (const float *)specular);
+
+}
+
+
+void moveLight(vec3 originPoint, vec3 lightPosition, float currentFrame){
+        lightPosition[0] = originPoint[0] + sin(currentFrame) * 5;
+        lightPosition[1] = originPoint[1] + fabs(sin(currentFrame) * 5) + 1;
+        lightPosition[2] = originPoint[2] + cos(currentFrame) * 5;
 }
 
 
@@ -290,37 +338,19 @@ int main(){
     glfwSetFramebufferSizeCallback(window, framebufferSizeCallback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
-    vec3 intialCubePositions[16];
+    //amountOfCubes should be a square number
+    int amountOfCubes = 64;
 
-    for(int i = 0; i < 16; i++){
-        intialCubePositions[i][0] = i / 4;
-        intialCubePositions[i][1] = 0;
-        intialCubePositions[i][2] = i % 4;
-    }
-
-    struct CubePositions cubePosition = {
-        .cubePositions = malloc(sizeof(vec3) * 16),
+    struct World world = {
+        .cubePositions = malloc(sizeof(vec3) * amountOfCubes),
         .positionIndex = 0
     };
 
-    for(; cubePosition.positionIndex < 16; cubePosition.positionIndex++){
-        cubePosition.cubePositions[cubePosition.positionIndex][0] = intialCubePositions[cubePosition.positionIndex][0];
-        cubePosition.cubePositions[cubePosition.positionIndex][1] = intialCubePositions[cubePosition.positionIndex][1];
-        cubePosition.cubePositions[cubePosition.positionIndex][2] = intialCubePositions[cubePosition.positionIndex][2];
+    for(; world.positionIndex < amountOfCubes; world.positionIndex++){
+        world.cubePositions[world.positionIndex][0] = world.positionIndex / (int)sqrt(amountOfCubes);
+        world.cubePositions[world.positionIndex][1] = 0;
+        world.cubePositions[world.positionIndex][2] = world.positionIndex % (int)sqrt(amountOfCubes);
     }
-
-    vec3 rotations[] = {
-        {1.0f, 0.0f, 0.0f},
-        {0.0f, 1.0f, 0.0f},
-        {0.0f, 0.0f, 1.0f},
-        {1.0f, 1.0f, 0.0f},
-        {0.0f, 1.0f, 1.0f},
-        {1.0f, 0.0f, 1.0f},
-        {0.5f, 0.0f, 0.5f},
-        {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f},
-        {1.0f, 1.0f, 1.0f},
-    };
 
     //creates cube
     float vertices[] = {
@@ -376,7 +406,7 @@ int main(){
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     glEnableVertexAttribArray(2);
 
-    unsigned lightVAO;
+    unsigned int lightVAO;
     glGenVertexArrays(1, &lightVAO);
     glBindVertexArray(lightVAO);
 
@@ -419,7 +449,7 @@ int main(){
 
     struct CamAndPos camAndPos = {
         .cam = &camera,
-        .cubePosition = &cubePosition
+        .world = &world
     };
 
     glfwSetWindowUserPointer(window, &camAndPos);
@@ -427,7 +457,20 @@ int main(){
     glfwSetScrollCallback(window, scrollCallback);
     glfwSetMouseButtonCallback(window, mouseButtonCallback);
 
-    vec3 lightPosition = {5.0f, 2.0f, 2.0f};
+    int amountOfPointLights = 4;
+    vec3 lightPositions[4] = {{5.0f, 2.0f, 2.0f},
+                            {-5.0f, 2.0f, -2.0f},
+                            {5.0f, 2.0f, -2.0f},
+                            {7.0f, 2.0f, -7.0f}};
+
+    vec3 lightOrginPoints[4];
+
+    for(int i = 0; i < amountOfPointLights; i++){
+        lightOrginPoints[i][0] = lightPositions[i][0];
+        lightOrginPoints[i][1] = lightPositions[i][1];
+        lightOrginPoints[i][2] = lightPositions[i][2];
+    }
+
     int posDirFlag = 1;
     glUseProgram(shaderProgram);
 
@@ -443,16 +486,11 @@ int main(){
     vec3 lightSpecular = {1.0f, 1.0f, 1.0f};
     vec3 lightDir = {-0.2f, -1.0f, -0.3f};
 
-    glUniform3fv(glGetUniformLocation(shaderProgram, "light.ambient"), 1, (const float *)lightAmbient);
-    glUniform3fv(glGetUniformLocation(shaderProgram, "light.diffuse"), 1, (const float *)lightDiffuse);
-    glUniform3fv(glGetUniformLocation(shaderProgram, "light.specular"), 1, (const float *)lightSpecular);
-    glUniform3fv(glGetUniformLocation(shaderProgram, "light.direction"), 1, (const float *)lightDir);
+    dirlightAssignUni(shaderProgram, lightDir, lightAmbient, lightDiffuse, lightSpecular);
 
-    glUniform1f(glGetUniformLocation(shaderProgram, "light.cutOff"), cos(glm_rad(12.5f)));
+    //glUniform1f(glGetUniformLocation(shaderProgram, "light.cutOff"), cos(glm_rad(12.5f)));
+    //glUniform1f(glGetUniformLocation(shaderProgram, "light.outerCutOff"), cos(glm_rad(17.5f)));
 
-    glUniform1f(glGetUniformLocation(shaderProgram, "light.constant"), 1.0f);
-    glUniform1f(glGetUniformLocation(shaderProgram, "light.linear"), 0.09f);
-    glUniform1f(glGetUniformLocation(shaderProgram, "light.quadratic"), 0.032f);
 
     while(!glfwWindowShouldClose(window)){
         float currentFrame = glfwGetTime();
@@ -471,14 +509,13 @@ int main(){
         glUniform3fv(glGetUniformLocation(shaderProgram, "viewPos"), 1, (const float *)camera.position);
 
         vec3 lightColor = {1.0f, 1.0f, 1.0f};
-        vec3 objectColor = {0.65f, 0.66, 0.71f};
-
-        glUniform3fv(glGetUniformLocation(shaderProgram, "light.position"), 1, (const float *)lightPosition);
-        glUniform3fv(glGetUniformLocation(shaderProgram, "lightPos"), 1, (const float *)lightPosition);
 
         glUniform3fv(glGetUniformLocation(shaderProgram, "lightingColor"), 1, (const float *)lightColor);
 
-        glUniform3fv(glGetUniformLocation(shaderProgram, "objectColor"), 1, (const float *)objectColor);
+        for(int i = 0; i < amountOfPointLights; i++){
+            pointlightAssignUni(shaderProgram, i, lightPositions[i], lightAmbient, lightDiffuse, lightSpecular, 1.0f, 0.14f, 0.07f);
+        }
+
 
         mat4 view;
 
@@ -493,13 +530,13 @@ int main(){
 
         glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, (const float *)projection);
 
-        for(int i = 0; i < cubePosition.positionIndex; i++){
+        for(int i = 0; i < world.positionIndex; i++){
             mat4 model;
             glm_mat4_identity(model);
             mat4 normalMatrix;
             glm_mat4_transpose_to(model, normalMatrix);
             glm_mat4_inv(normalMatrix, normalMatrix);
-            glm_translate(model, cubePosition.cubePositions[i]);
+            glm_translate(model, world.cubePositions[i]);
             //vec3 rotationAxises = {1.0f, -1.0f, 1.0f};
             //glm_rotate(model, (float)glfwGetTime() * glm_rad(50.0f), rotations[i % 10]);
             glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "model"), 1, GL_FALSE, (const float *)model);
@@ -515,21 +552,23 @@ int main(){
         glUniform3fv(glGetUniformLocation(lightShaderProgram, "lightColor"), 1,  (const float *)lightColor);
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "projection"), 1, GL_FALSE, (const float *)projection);
         glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "view"), 1, GL_FALSE, (const float *)view);
-        mat4 model;
-        glm_mat4_identity(model);
-        glm_translate(model, lightPosition);
-        glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "model"), 1, GL_FALSE, (const float *)model);
-        glBindVertexArray(lightVAO);
-        glDrawArrays(GL_TRIANGLES, 0, 36);
+        for(int i = 0; i < amountOfPointLights; i++){
+            mat4 model;
+            glm_mat4_identity(model);
+            glm_translate(model, lightPositions[i]);
+            glUniformMatrix4fv(glGetUniformLocation(lightShaderProgram, "model"), 1, GL_FALSE, (const float *)model);
+            glBindVertexArray(lightVAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+        }
 
         glfwSwapBuffers(window);
         glfwPollEvents();
 
-        lightPosition[0] = sin(currentFrame) * 5;
-        lightPosition[1] = fabs(sin(currentFrame) * 5) + 1;
-        lightPosition[2] = cos(currentFrame) * 5;
+        for(int i = 0; i < amountOfPointLights; i++){
+            moveLight(lightOrginPoints[i], lightPositions[i], currentFrame);
+        }
     }
-    free(cubePosition.cubePositions);
+    free(world.cubePositions);
     glfwTerminate();
     return 0;
 }
