@@ -18,6 +18,7 @@ struct Camera{
     float pitch;
     float sensitivity;
     float lastX, lastY;
+    int isFlashOn;
     int firstMouse;
     float fov;
 };
@@ -76,6 +77,12 @@ void processInput(GLFWwindow *window, float deltaTime){
         glm_normalize(cameraPosOffset);
         glm_vec3_mul(cameraPosOffset, cameraSpeed, cameraPosOffset);
         glm_vec3_add(cam->position, cameraPosOffset, cam->position);
+    }
+    if(glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS){
+        cam->isFlashOn = 0;
+    }
+    if(glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS){
+        cam->isFlashOn = 1;
     }
 }
 
@@ -280,6 +287,7 @@ void dirlightAssignUni(unsigned int shaderProgram, vec3 direction, vec3 ambient,
 
 
 void pointlightAssignUni(unsigned int shaderProgram, int index, vec3 position, vec3 ambient, vec3 diffuse, vec3 specular, float constant, float linear, float quadratic){
+    glUseProgram(shaderProgram);
 
     char name[128];
 
@@ -304,6 +312,24 @@ void pointlightAssignUni(unsigned int shaderProgram, int index, vec3 position, v
     snprintf(name, sizeof(name), "pointLights[%d].specular", index);
     glUniform3fv(glGetUniformLocation(shaderProgram, name), 1, (const float *)specular);
 
+}
+
+
+void spotlightAssignUni(unsigned int shaderProgram, vec3 position, vec3 direction, vec3 ambient, vec3 diffuse, vec3 specular, float cutOff, float outerCutOff, float constant, float linear, float quadratic){
+    glUseProgram(shaderProgram);
+
+    glUniform3fv(glGetUniformLocation(shaderProgram, "spotLight.direction"), 1, (const float *)direction);
+    glUniform3fv(glGetUniformLocation(shaderProgram, "spotLight.position"), 1, (const float *)position);
+
+    glUniform3fv(glGetUniformLocation(shaderProgram, "spotLight.ambient"), 1, (const float *)ambient);
+    glUniform3fv(glGetUniformLocation(shaderProgram, "spotLight.diffuse"), 1, (const float *)diffuse);
+    glUniform3fv(glGetUniformLocation(shaderProgram, "spotLight.specular"), 1, (const float *)specular);
+
+    glUniform1f(glGetUniformLocation(shaderProgram, "spotLight.cutOff"), cutOff);
+    glUniform1f(glGetUniformLocation(shaderProgram, "spotLight.outerCutOff"), outerCutOff);
+    glUniform1f(glGetUniformLocation(shaderProgram, "spotLight.constant"), constant);
+    glUniform1f(glGetUniformLocation(shaderProgram, "spotLight.linear"), linear);
+    glUniform1f(glGetUniformLocation(shaderProgram, "spotLight.quadratic"), quadratic);
 }
 
 
@@ -441,6 +467,7 @@ int main(){
         .sensitivity = 0.1f,
         .lastX = 400.0f,
         .lastY = 300.0f,
+        .isFlashOn = 0,
         .firstMouse = 1,
         .fov = 45.0f
     };
@@ -484,6 +511,7 @@ int main(){
     vec3 lightAmbient = {0.2f, 0.2f, 0.2f};
     vec3 lightDiffuse = {0.5f, 0.5f, 0.5f};
     vec3 lightSpecular = {1.0f, 1.0f, 1.0f};
+
     vec3 lightDir = {-0.2f, -1.0f, -0.3f};
 
     dirlightAssignUni(shaderProgram, lightDir, lightAmbient, lightDiffuse, lightSpecular);
@@ -491,6 +519,8 @@ int main(){
     //glUniform1f(glGetUniformLocation(shaderProgram, "light.cutOff"), cos(glm_rad(12.5f)));
     //glUniform1f(glGetUniformLocation(shaderProgram, "light.outerCutOff"), cos(glm_rad(17.5f)));
 
+    float cutOff = cos(glm_rad(2.5f));
+    float outerCutOff = cos(glm_rad(5.0f));
 
     while(!glfwWindowShouldClose(window)){
         float currentFrame = glfwGetTime();
@@ -511,6 +541,10 @@ int main(){
         vec3 lightColor = {1.0f, 1.0f, 1.0f};
 
         glUniform3fv(glGetUniformLocation(shaderProgram, "lightingColor"), 1, (const float *)lightColor);
+
+        glUniform1i(glGetUniformLocation(shaderProgram, "isSpotLightOn"), camera.isFlashOn);
+
+        spotlightAssignUni(shaderProgram, camera.position, camera.front, lightAmbient, lightDiffuse, lightSpecular, cutOff, outerCutOff, 1.0f, 0.14f, 0.07f);
 
         for(int i = 0; i < amountOfPointLights; i++){
             pointlightAssignUni(shaderProgram, i, lightPositions[i], lightAmbient, lightDiffuse, lightSpecular, 1.0f, 0.14f, 0.07f);
