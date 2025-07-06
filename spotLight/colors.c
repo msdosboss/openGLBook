@@ -1,13 +1,6 @@
-#include "glad/glad.h"
-#include <GLFW/glfw3.h>
-#include <stdio.h>
-#include <stdbool.h>
-#include <stdlib.h>
 #include <math.h>
-#include "cglm/cglm.h"
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
+#include "modelImport.h"
 
 
 struct Camera{
@@ -157,44 +150,6 @@ unsigned int linkShaders(const char *vertexFileName, const char *fragmentFileNam
     glDeleteShader(fragmentShader);
 
     return shaderProgram;
-}
-
-
-unsigned int genTexture(const char *firstFileName, GLenum textureCount){
-
-    stbi_set_flip_vertically_on_load(true);
-
-    unsigned int texture;
-
-    int width, height, nChannels;
-    unsigned char *data = stbi_load(firstFileName, &width, &height, &nChannels, 0);
-    if(data == NULL){
-        printf("ERROR: Failed to laod texture %s\n", firstFileName);
-        return 0;
-    }
-
-    glGenTextures(1, &texture);
-
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    glActiveTexture(textureCount);
-    glBindTexture(GL_TEXTURE_2D, texture);
-
-    GLenum format = GL_RGB;
-    if(nChannels == 1) format = GL_RED;
-    else if(nChannels == 4) format = GL_RGBA;
-
-    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
-    glGenerateMipmap(GL_TEXTURE_2D);
-
-    stbi_image_free(data);
-
-    return texture;
 }
 
 
@@ -372,11 +327,11 @@ int main(){
         .positionIndex = 0
     };
 
-    for(; world.positionIndex < amountOfCubes; world.positionIndex++){
+    /*for(; world.positionIndex < amountOfCubes; world.positionIndex++){
         world.cubePositions[world.positionIndex][0] = world.positionIndex / (int)sqrt(amountOfCubes);
         world.cubePositions[world.positionIndex][1] = 0;
         world.cubePositions[world.positionIndex][2] = world.positionIndex % (int)sqrt(amountOfCubes);
-    }
+    }*/
 
     //creates cube
     float vertices[] = {
@@ -451,8 +406,8 @@ int main(){
         printf("failed to compile lightShaderProgram");
     }
 
-    unsigned int containerTexture = genTexture("textures/container.png", GL_TEXTURE0);
-    unsigned int containerSpecular = genTexture("textures/containerSpecular.png", GL_TEXTURE1);
+    unsigned int containerTexture = genTexture("container.png", "textures");
+    unsigned int containerSpecular = genTexture("containerSpecular.png", "textures");
 
     glBindVertexArray(VAO);
 
@@ -503,8 +458,8 @@ int main(){
 
     float shininess = 64.0f;
 
-    glUniform1i(glGetUniformLocation(shaderProgram, "material.diffuse"), 0);
-    glUniform1i(glGetUniformLocation(shaderProgram, "material.specular"), 1);
+    //glUniform1i(glGetUniformLocation(shaderProgram, "material.diffuse"), 0);
+    //glUniform1i(glGetUniformLocation(shaderProgram, "material.specular"), 1);
     glUniform1f(glGetUniformLocation(shaderProgram, "material.shininess"), shininess);
 
 
@@ -516,11 +471,11 @@ int main(){
 
     dirlightAssignUni(shaderProgram, lightDir, lightAmbient, lightDiffuse, lightSpecular);
 
-    //glUniform1f(glGetUniformLocation(shaderProgram, "light.cutOff"), cos(glm_rad(12.5f)));
-    //glUniform1f(glGetUniformLocation(shaderProgram, "light.outerCutOff"), cos(glm_rad(17.5f)));
-
     float cutOff = cos(glm_rad(2.5f));
     float outerCutOff = cos(glm_rad(5.0f));
+
+    struct Model model;
+    loadModel(&model, "models/backpack/backpack.obj");
 
     while(!glfwWindowShouldClose(window)){
         float currentFrame = glfwGetTime();
@@ -581,6 +536,7 @@ int main(){
             glDrawArrays(GL_TRIANGLES, 0, 36);
 
         }
+        drawModel(&model, shaderProgram);
 
         glUseProgram(lightShaderProgram);
         glUniform3fv(glGetUniformLocation(lightShaderProgram, "lightColor"), 1,  (const float *)lightColor);
