@@ -5,6 +5,7 @@
 struct Material {
     sampler2D diffuse[MAX_TEXTURES];
     sampler2D specular[MAX_TEXTURES];
+    vec3 diffuseColor;
     float shininess;
 };
 uniform Material material;
@@ -75,6 +76,7 @@ void main(){
     vec3 viewDir = normalize(viewPos - FragPos);
 
     vec3 result = calcDirLight(dirLight, norm, viewDir);
+    //vec3 result = vec3(0.0f, 0.0f, 0.0f);
 
     for(int i = 0; i < NR_POINT_LIGHTS; i++){
         result += calcPointDir(pointLights[i], norm, FragPos, viewDir);
@@ -89,6 +91,9 @@ void main(){
 
 
 vec3 getDiffuseColor(){
+    if(diffuseCount == 0){
+        return material.diffuseColor;
+    }
     vec3 color = vec3(0.0);
     for(int i = 0; i < MAX_TEXTURES; i++){
         color += texture(material.diffuse[i], TexCoords).rgb;
@@ -123,8 +128,9 @@ vec3 calcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir){
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
 
-    vec3 ambient = light.ambient * getDiffuseColor();
-    vec3 diffuse = diff * light.diffuse * getDiffuseColor();
+    vec3 diffuseCol = getDiffuseColor();
+    vec3 ambient = light.ambient * diffuseCol;
+    vec3 diffuse = diff * light.diffuse * diffuseCol;
     vec3 specular = getSpecularColor() * spec * light.specular;
 
     ambient *= attenuation;
@@ -146,8 +152,9 @@ vec3 calcDirLight(DirLight light, vec3 normal, vec3 viewDir){
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
 
-    vec3 ambient = light.ambient * getDiffuseColor();
-    vec3 diffuse = diff * light.diffuse * getDiffuseColor();
+    vec3 diffuseCol = getDiffuseColor();
+    vec3 ambient = light.ambient * diffuseCol;
+    vec3 diffuse = diff * light.diffuse * diffuseCol;
     vec3 specular = getSpecularColor() * spec * light.specular;
 
     return (ambient + diffuse + specular);

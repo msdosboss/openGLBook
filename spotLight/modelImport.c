@@ -17,7 +17,7 @@ unsigned int genTexture(char *path, char *directory){
     int width, height, nChannels;
     unsigned char *data = stbi_load(fullPath, &width, &height, &nChannels, 0);
     if(data == NULL){
-        printf("ERROR: Failed to laod texture %s\n", fullPath);
+        printf("ERROR: Failed to load texture %s\n", fullPath);
         return 0;
     }
 
@@ -45,6 +45,29 @@ unsigned int genTexture(char *path, char *directory){
 }
 
 
+unsigned int genTextureFromEmbeddedTexture(int nrChannels, int width, int height, unsigned char *data){
+    GLenum format = GL_RGB;
+    if(nrChannels == 1) format = GL_RED;
+    else if(nrChannels == 4) format = GL_RGBA;
+
+    unsigned int texture;
+    glGenTextures(1, &texture);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    //glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    return texture;
+}
+
 
 unsigned int totalIndices(struct aiMesh *mesh){
     unsigned int totalIndices = 0;
@@ -56,29 +79,61 @@ unsigned int totalIndices(struct aiMesh *mesh){
 }
 
 
-struct Texture* loadMaterialTextures(struct Model *model, struct aiMaterial *mat, enum aiTextureType type, char *typeName){
+struct Texture* loadMaterialTextures(struct Model *model, struct aiMaterial *mat, enum aiTextureType type, char *typeName, const struct aiScene *scene){
     unsigned int amountOfTextures = aiGetMaterialTextureCount(mat, type);
     struct Texture *textures = malloc(sizeof(struct Texture) * amountOfTextures);
 
     for(int i = 0; i < amountOfTextures; i++){
         struct aiString str;
         aiGetMaterialTexture(mat, type, i, &str, NULL, NULL, NULL, NULL, NULL, NULL);
-        //This should probably be a hashmap, but this is how the book does it
-        bool skip = false;
-        for(int j = 0; j < model->texturesLen; j++){
-            if(strcmp(str.data, model->texturesLoaded[j].filePath) == 0){
-                textures[i] = model->texturesLoaded[j];
-                skip = true;
-                break;
+        //This means texture is embedded in file
+        if(str.data[0] == '*'){
+            int textureIndex = atoi(str.data + 1);
+            if(textureIndex < scene->mNumTextures){
+                struct aiTexture *embeddedTexture = scene->mTextures[textureIndex];
+
+                int width, height, nrChannels;
+                unsigned char *data = NULL;
+                // mHeight will be 0 for compressed image formats otherwise it should be raw data
+                if(embeddedTexture->mHeight == 0){
+                    stbi_set_flip_vertically_on_load(true);
+                    data = stbi_load_from_memory((const unsigned char*)embeddedTexture->pcData, embeddedTexture->mWidth, &width, &height, &nrChannels, 0);
+                    textures[i].id = genTextureFromEmbeddedTexture(nrChannels, width, height, data);
+                    stbi_image_free(data);
+                }
+
+                else{
+                    data = (unsigned char *)embeddedTexture->pcData;
+                    width = embeddedTexture->mWidth;
+                    height = embeddedTexture->mHeight;
+                    //Assuming RGBA
+                    nrChannels = 4;
+                    textures[i].id = genTextureFromEmbeddedTexture(nrChannels, width, height, data);
+                }
+                textures[i].type = malloc(sizeof(char) * (strlen(typeName) + 1));
+                sprintf(textures[i].type, "%s", typeName);
+                textures[i].filePath = NULL;
+                model->texturesLoaded[model->texturesLen++] = textures[i];
             }
         }
-        if(!skip){
-            textures[i].id = genTexture(str.data, model->directory);
-            textures[i].type = malloc(sizeof(char) * (strlen(typeName) + 1));
-            sprintf(textures[i].type, "%s", typeName);
-            textures[i].filePath = malloc(sizeof(char) * (strlen(str.data) + 1));
-            sprintf(textures[i].filePath, "%s", str.data);
-            model->texturesLoaded[model->texturesLen++] = textures[i];
+        else{
+            //This should probably be a hashmap, but this is how the book does it
+            bool skip = false;
+            for(int j = 0; j < model->texturesLen; j++){
+                if(strcmp(str.data, model->texturesLoaded[j].filePath) == 0){
+                    textures[i] = model->texturesLoaded[j];
+                    skip = true;
+                    break;
+                }
+            }
+            if(!skip){
+                textures[i].id = genTexture(str.data, model->directory);
+                textures[i].type = malloc(sizeof(char) * (strlen(typeName) + 1));
+                sprintf(textures[i].type, "%s", typeName);
+                textures[i].filePath = malloc(sizeof(char) * (strlen(str.data) + 1));
+                sprintf(textures[i].filePath, "%s", str.data);
+                model->texturesLoaded[model->texturesLen++] = textures[i];
+            }
         }
     }
 
@@ -129,13 +184,29 @@ struct Mesh processMesh(struct Model *model, struct aiMesh *mesh, const struct a
         unsigned int specularCount = aiGetMaterialTextureCount(mat, aiTextureType_SPECULAR);
         myMesh.texturesLen = diffuseCount + specularCount;
         myMesh.textures = malloc(sizeof(struct Texture) * myMesh.texturesLen);
-        struct Texture *diffuseMaps = loadMaterialTextures(model, mat, aiTextureType_DIFFUSE, "texture_diffuse");
-        struct Texture *specularMaps = loadMaterialTextures(model, mat, aiTextureType_SPECULAR, "texture_specular");
-        for(int i = 0; i < diffuseCount; i++){
-            myMesh.textures[i] = diffuseMaps[i];
+        if(myMesh.texturesLen > 0){
+            struct Texture *diffuseMaps = loadMaterialTextures(model, mat, aiTextureType_DIFFUSE, "texture_diffuse", scene);
+            struct Texture *specularMaps = loadMaterialTextures(model, mat, aiTextureType_SPECULAR, "texture_specular", scene);
+            for(int i = 0; i < diffuseCount; i++){
+                myMesh.textures[i] = diffuseMaps[i];
+            }
+            for(int i = 0; i < specularCount; i++){
+                myMesh.textures[diffuseCount + i] = specularMaps[i];
+            }
         }
-        for(int i = 0; i < specularCount; i++){
-            myMesh.textures[diffuseCount + i] = specularMaps[i];
+        else{
+            struct aiColor4D color = {1.0f, 0.0f, 0.0f, 1.0f};
+            if(AI_SUCCESS == aiGetMaterialColor(mat, AI_MATKEY_COLOR_DIFFUSE, &color)){
+                myMesh.diffuseColor[0] = color.r;
+                myMesh.diffuseColor[1] = color.g;
+                myMesh.diffuseColor[2] = color.b;
+            }
+            else{
+                myMesh.diffuseColor[0] = 1.0f;
+                myMesh.diffuseColor[1] = 0.0f;
+                myMesh.diffuseColor[2] = 0.0f;
+            }
+
         }
 
     }
@@ -195,8 +266,9 @@ void drawModel(struct Model *model, unsigned int shaderId){
     int i = 0;
     mat4 modelMatrix;
     glm_mat4_identity(modelMatrix);
-    glm_translate(modelMatrix, (vec3){0.0f, 0.0f, 0.0f});
-    glm_scale(modelMatrix, (vec3){10.0f, 10.0f, 10.0f});  // try increasing this
+    glm_translate(modelMatrix, (vec3){5.0f, 5.0f, 5.0f});
+    //glm_rotate(modelMatrix, glm_rad(270.0f), (vec3){1.0f, 0.0f, 0.0f});
+    //glm_scale(modelMatrix, (vec3){100.0f, 100.0f, 100.0f});
 
     glUniformMatrix4fv(glGetUniformLocation(shaderId, "model"), 1, GL_FALSE, (const float *)modelMatrix);
 
@@ -211,28 +283,34 @@ void drawMesh(struct Mesh *mesh, unsigned int shaderId){
     int diffuseAmount = 0;
     int specularAmount = 0;
 
-    for(int i = 0; i < mesh->texturesLen; i++){
-        glActiveTexture(GL_TEXTURE0 + i);
-        if(strcmp(mesh->textures[i].type, "texture_diffuse") == 0){
-            sprintf(name, "material.diffuse%d", diffuseAmount);
-            diffuseAmount++;
-        }
-        else{
-            sprintf(name, "material.specular%d", specularAmount);
-            specularAmount++;
-        }
+    if(mesh->texturesLen > 0){
+        for(int i = 0; i < mesh->texturesLen; i++){
+            glActiveTexture(GL_TEXTURE0 + i);
+            if(strcmp(mesh->textures[i].type, "texture_diffuse") == 0){
+                sprintf(name, "material.diffuse%d", diffuseAmount);
+                diffuseAmount++;
+            }
+            else{
+                sprintf(name, "material.specular%d", specularAmount);
+                specularAmount++;
+            }
 
-        glUniform1i(glGetUniformLocation(shaderId, "diffuseCount"), diffuseAmount);
-        glUniform1i(glGetUniformLocation(shaderId, "specularCount"), specularAmount);
+            glUniform1i(glGetUniformLocation(shaderId, "diffuseCount"), diffuseAmount);
+            glUniform1i(glGetUniformLocation(shaderId, "specularCount"), specularAmount);
 
-        glUniform1i(glGetUniformLocation(shaderId, name), i);
-        glBindTexture(GL_TEXTURE_2D, mesh->textures[i].id);
-        //printf("%s\n", name);
+            glUniform1i(glGetUniformLocation(shaderId, name), i);
+            glBindTexture(GL_TEXTURE_2D, mesh->textures[i].id);
+            //printf("%s\n", name);
+        }
+    }
+    else{
+        glUniform1i(glGetUniformLocation(shaderId, "diffuseCount"), 0);
+        glUniform3fv(glGetUniformLocation(shaderId, "material.diffuseColor"), 1, (const float *)mesh->diffuseColor);
     }
     glActiveTexture(GL_TEXTURE0);
 
     glBindVertexArray(mesh->VAO);
-    printf("Drawing mesh with %d indices and %d textures\n", mesh->indicesLen, mesh->texturesLen);
+    //printf("Drawing mesh with %d indices and %d textures\n", mesh->indicesLen, mesh->texturesLen);
     glDrawElements(GL_TRIANGLES, mesh->indicesLen, GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 }

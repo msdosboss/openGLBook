@@ -7,6 +7,7 @@
 #include <assimp/cimport.h>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+#include <assimp/types.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -32,6 +33,7 @@ struct Mesh {
 
   struct Texture *textures;
   unsigned int texturesLen;
+  vec3 diffuseColor;
 
   unsigned int VAO, VBO, EBO;
 };
@@ -52,7 +54,8 @@ struct Mesh processMesh(struct Model *model, struct aiMesh *mesh,
                         const struct aiScene *scene);
 struct Texture *loadMaterialTextures(struct Model *model,
                                      struct aiMaterial *mat,
-                                     enum aiTextureType type, char *typeName);
+                                     enum aiTextureType type, char *typeName,
+                                     const struct aiScene *scene);
 
 struct Mesh meshConstructor(struct Vertex *vertices, unsigned int verticesLen,
                             unsigned int *indices, unsigned int indicesLen,

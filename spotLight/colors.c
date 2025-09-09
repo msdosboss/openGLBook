@@ -41,7 +41,7 @@ void processInput(GLFWwindow *window, float deltaTime){
         glfwSetWindowShouldClose(window, true);
     }
 
-    vec3 cameraSpeed = {2.5f * deltaTime, 2.5f * deltaTime, 2.5f * deltaTime};
+    vec3 cameraSpeed = {10.0f * deltaTime, 10.0f * deltaTime, 10.0f * deltaTime};
 
     if(glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS){
         vec3 cameraPosOffset;
@@ -327,11 +327,11 @@ int main(){
         .positionIndex = 0
     };
 
-    /*for(; world.positionIndex < amountOfCubes; world.positionIndex++){
+    for(; world.positionIndex < amountOfCubes; world.positionIndex++){
         world.cubePositions[world.positionIndex][0] = world.positionIndex / (int)sqrt(amountOfCubes);
         world.cubePositions[world.positionIndex][1] = 0;
         world.cubePositions[world.positionIndex][2] = world.positionIndex % (int)sqrt(amountOfCubes);
-    }*/
+    }
 
     //creates cube
     float vertices[] = {
@@ -397,7 +397,12 @@ int main(){
     glEnableVertexAttribArray(0);
 
 
-    unsigned int shaderProgram = linkShaders("shaders/colorVertex.glsl", "shaders/colorFragments.glsl");
+    /*unsigned int shaderProgram = linkShaders("shaders/colorVertex.glsl", "shaders/colorFragments.glsl");
+    glUseProgram(shaderProgram);
+
+    unsigned int lightShaderProgram = linkShaders("shaders/lightVertex.glsl", "shaders/lightFragments.glsl");
+*/
+    unsigned int shaderProgram = linkShaders("shaders/visualizeDepthBufferVertex.glsl", "shaders/visualizeDepthBufferFragments.glsl");
     glUseProgram(shaderProgram);
 
     unsigned int lightShaderProgram = linkShaders("shaders/lightVertex.glsl", "shaders/lightFragments.glsl");
@@ -475,14 +480,23 @@ int main(){
     float outerCutOff = cos(glm_rad(5.0f));
 
     struct Model model;
-    loadModel(&model, "models/backpack/backpack.obj");
+    //loadModel(&model, "models/backpack/backpack.obj");
+    //loadModel(&model, "models/DSTEG1JM/DSTEG1JM.obj");
+    //loadModel(&model, "models/snowman/snowman.obj");
+    loadModel(&model, "models/CesiumMilkTruck.glb");
+    //loadModel(&model, "models/fullRobotAssembly/fullRobotAssembly.obj");
+    //loadModel(&model, "models/weirdDino.obj");
+
+    //GL_LESS is defualt
+    glDepthFunc(GL_LESS);
 
     while(!glfwWindowShouldClose(window)){
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+        glClearColor(0.15f, 0.15f, 0.18f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         processInput(window, deltaTime);
@@ -537,6 +551,8 @@ int main(){
 
         }
         drawModel(&model, shaderProgram);
+        //I dont really like this fix, but it is the easy way to do it right now
+        glUniform1i(glGetUniformLocation(shaderProgram, "diffuseCount"), 1);
 
         glUseProgram(lightShaderProgram);
         glUniform3fv(glGetUniformLocation(lightShaderProgram, "lightColor"), 1,  (const float *)lightColor);
