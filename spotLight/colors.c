@@ -397,15 +397,17 @@ int main(){
     glEnableVertexAttribArray(0);
 
 
-    /*unsigned int shaderProgram = linkShaders("shaders/colorVertex.glsl", "shaders/colorFragments.glsl");
+    unsigned int shaderProgram = linkShaders("shaders/colorVertex.glsl", "shaders/colorFragments.glsl");
     glUseProgram(shaderProgram);
 
     unsigned int lightShaderProgram = linkShaders("shaders/lightVertex.glsl", "shaders/lightFragments.glsl");
-*/
-    unsigned int shaderProgram = linkShaders("shaders/visualizeDepthBufferVertex.glsl", "shaders/visualizeDepthBufferFragments.glsl");
+
+    unsigned int highLightShaderProgram = linkShaders("shaders/lightVertex.glsl", "shaders/highlightFragments.glsl");
+
+    /*unsigned int shaderProgram = linkShaders("shaders/visualizeDepthBufferVertex.glsl", "shaders/visualizeDepthBufferFragments.glsl");
     glUseProgram(shaderProgram);
 
-    unsigned int lightShaderProgram = linkShaders("shaders/lightVertex.glsl", "shaders/lightFragments.glsl");
+    unsigned int lightShaderProgram = linkShaders("shaders/lightVertex.glsl", "shaders/lightFragments.glsl");*/
 
     if(lightShaderProgram == 0){
         printf("failed to compile lightShaderProgram");
@@ -417,6 +419,7 @@ int main(){
     glBindVertexArray(VAO);
 
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_STENCIL_TEST);
 
     struct Camera camera ={
         .position = {4.0f, 4.0f, 3.0f},
@@ -490,14 +493,21 @@ int main(){
     //GL_LESS is defualt
     glDepthFunc(GL_LESS);
 
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+    glStencilFunc(GL_ALWAYS, 1, 0xff);
+    //This number will be anded with the values in the bit mask
+    glStencilMask(0xff);
+    //glStencilMask(0x00);
+
     while(!glfwWindowShouldClose(window)){
+
         float currentFrame = glfwGetTime();
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
 
         //glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
         glClearColor(0.15f, 0.15f, 0.18f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
         processInput(window, deltaTime);
         glUseProgram(shaderProgram);
@@ -550,6 +560,34 @@ int main(){
             glDrawArrays(GL_TRIANGLES, 0, 36);
 
         }
+
+        glDisable(GL_DEPTH_TEST);
+        glStencilFunc(GL_NOTEQUAL, 1, 0xff);
+        glStencilMask(0x00);
+
+        glUseProgram(highLightShaderProgram);
+        glUniformMatrix4fv(glGetUniformLocation(highLightShaderProgram, "view"), 1, GL_FALSE, (const float *)view);
+        glUniformMatrix4fv(glGetUniformLocation(highLightShaderProgram, "projection"), 1, GL_FALSE, (const float *)projection);
+
+        for(int i = 0; i < world.positionIndex; i++){
+            mat4 model;
+            glm_mat4_identity(model);
+            glm_translate(model, world.cubePositions[i]);
+            glm_scale(model, (vec3){1.1f, 1.1f, 1.1f});
+            glUniformMatrix4fv(glGetUniformLocation(highLightShaderProgram, "model"), 1, GL_FALSE, (const float *)model);
+
+            glBindVertexArray(VAO);
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+
+        }
+
+        glEnable(GL_DEPTH_TEST);
+        glStencilMask(0xFF);
+        glStencilFunc(GL_ALWAYS, 1, 0xff);
+        glUseProgram(shaderProgram);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "view"), 1, GL_FALSE, (const float *)view);
+        glUniformMatrix4fv(glGetUniformLocation(shaderProgram, "projection"), 1, GL_FALSE, (const float *)projection);
+        //I want to change drawModel to take the view and projection matrixies and set them because this caused a really annoying bug
         drawModel(&model, shaderProgram);
         //I dont really like this fix, but it is the easy way to do it right now
         glUniform1i(glGetUniformLocation(shaderProgram, "diffuseCount"), 1);
