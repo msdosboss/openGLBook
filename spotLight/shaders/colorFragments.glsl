@@ -1,4 +1,4 @@
-#version 330 core
+#version 400 core
 
 #define MAX_TEXTURES 4
 

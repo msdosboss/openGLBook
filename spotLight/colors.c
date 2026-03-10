@@ -111,6 +111,7 @@ unsigned int linkShaders(const char *vertexFileName, const char *fragmentFileNam
     if(!success){
         char infoLog[512];
         glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
+        printf("In File %s\n", vertexFileName);
         printf("ERROR::SHADER::VERTEX::COMPILATION_FAILED\n%s\n",infoLog);
     }
     free((char *)vertexFileText);
@@ -128,6 +129,7 @@ unsigned int linkShaders(const char *vertexFileName, const char *fragmentFileNam
     if(!success){
         char infoLog[512];
         glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+        printf("In File %s\n", fragmentFileName);
         printf("ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n%s\n",infoLog);
         return 0;
     }
@@ -483,10 +485,11 @@ int main(){
     float outerCutOff = cos(glm_rad(5.0f));
 
     struct Model model;
-    //loadModel(&model, "models/backpack/backpack.obj");
+    loadModel(&model, "models/backpack/backpack.obj");
     //loadModel(&model, "models/DSTEG1JM/DSTEG1JM.obj");
     //loadModel(&model, "models/snowman/snowman.obj");
-    loadModel(&model, "models/CesiumMilkTruck.glb");
+    //loadModel(&model, "models/CesiumMilkTruck.glb");
+    //loadModel(&model, "models/teapot.stl");
     //loadModel(&model, "models/fullRobotAssembly/fullRobotAssembly.obj");
     //loadModel(&model, "models/weirdDino.obj");
 
